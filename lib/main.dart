@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart';
 
 void main() {
   runApp(const App());
@@ -10,9 +9,8 @@ void main() {
 class Expense {
   String title;
   double amount;
-  String type; // personal / business
+  String type;
   String category;
-  String subCategory;
   String date;
   String weekday;
 
@@ -21,7 +19,6 @@ class Expense {
     required this.amount,
     required this.type,
     required this.category,
-    required this.subCategory,
     required this.date,
     required this.weekday,
   });
@@ -31,7 +28,6 @@ class Expense {
         "amount": amount,
         "type": type,
         "category": category,
-        "subCategory": subCategory,
         "date": date,
         "weekday": weekday,
       };
@@ -42,7 +38,6 @@ class Expense {
       amount: json["amount"],
       type: json["type"],
       category: json["category"],
-      subCategory: json["subCategory"],
       date: json["date"],
       weekday: json["weekday"],
     );
@@ -58,7 +53,7 @@ class App extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
+        colorSchemeSeed: Colors.indigo,
       ),
       home: const Home(),
     );
@@ -73,18 +68,19 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  List<Expense> expenses = [];
+
   final titleCtrl = TextEditingController();
   final amountCtrl = TextEditingController();
 
-  List<Expense> list = [];
-
   String selectedType = "personal";
 
-  List<String> personalCats = ["خانه", "خوراک", "حمل‌ونقل"];
-  List<String> businessCats = ["تولید", "اداری", "تعمیرات"];
+  final categories = {
+    "personal": ["خوراک", "حمل‌ونقل", "خانه", "تفریح"],
+    "business": ["تولید", "اداری", "تعمیرات", "مواد اولیه"]
+  };
 
   String? selectedCategory;
-  String? selectedSub;
 
   @override
   void initState() {
@@ -92,15 +88,9 @@ class _HomeState extends State<Home> {
     load();
   }
 
-  String getJalaliDate() {
+  String getDate() {
     final now = DateTime.now();
-    final f = DateFormat("yyyy/MM/dd");
-    return f.format(now);
-  }
-
-  String getWeekday() {
-    final now = DateTime.now();
-    return [
+    const weekdays = [
       "یکشنبه",
       "دوشنبه",
       "سه‌شنبه",
@@ -108,13 +98,16 @@ class _HomeState extends State<Home> {
       "پنجشنبه",
       "جمعه",
       "شنبه"
-    ][now.weekday % 7];
+    ];
+    return "${now.year}/${now.month}/${now.day} - ${weekdays[now.weekday % 7]}";
   }
 
   Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();
-    final data = jsonEncode(list.map((e) => e.toJson()).toList());
-    await prefs.setString("data", data);
+    prefs.setString(
+      "data",
+      jsonEncode(expenses.map((e) => e.toJson()).toList()),
+    );
   }
 
   Future<void> load() async {
@@ -124,12 +117,13 @@ class _HomeState extends State<Home> {
     if (data != null) {
       final decoded = jsonDecode(data);
       setState(() {
-        list = decoded.map<Expense>((e) => Expense.fromJson(e)).toList();
+        expenses =
+            decoded.map<Expense>((e) => Expense.fromJson(e)).toList();
       });
     }
   }
 
-  void add() {
+  void addExpense() {
     if (titleCtrl.text.isEmpty || amountCtrl.text.isEmpty) return;
 
     final exp = Expense(
@@ -137,13 +131,12 @@ class _HomeState extends State<Home> {
       amount: double.parse(amountCtrl.text),
       type: selectedType,
       category: selectedCategory ?? "سایر",
-      subCategory: selectedSub ?? "عمومی",
-      date: getJalaliDate(),
-      weekday: getWeekday(),
+      date: getDate(),
+      weekday: "",
     );
 
     setState(() {
-      list.add(exp);
+      expenses.insert(0, exp);
     });
 
     save();
@@ -152,94 +145,155 @@ class _HomeState extends State<Home> {
     amountCtrl.clear();
   }
 
+  double get total =>
+      expenses.fold(0, (sum, e) => sum + e.amount);
+
+  void openAddSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "ثبت هزینه جدید",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 10),
+
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: "شرح هزینه"),
+              ),
+
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: "مبلغ"),
+              ),
+
+              const SizedBox(height: 10),
+
+              Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text("شخصی"),
+                    selected: selectedType == "personal",
+                    onSelected: (_) {
+                      setState(() => selectedType = "personal");
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  ChoiceChip(
+                    label: const Text("کاری"),
+                    selected: selectedType == "business",
+                    onSelected: (_) {
+                      setState(() => selectedType = "business");
+                    },
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              Wrap(
+                spacing: 8,
+                children: categories[selectedType]!
+                    .map(
+                      (c) => ChoiceChip(
+                        label: Text(c),
+                        selected: selectedCategory == c,
+                        onSelected: (_) {
+                          setState(() => selectedCategory = c);
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  addExpense();
+                  Navigator.pop(context);
+                },
+                child: const Text("ثبت"),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cats =
-        selectedType == "personal" ? personalCats : businessCats;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("دستیار هزینه‌ها"),
+      floatingActionButton: FloatingActionButton(
+        onPressed: openAddSheet,
+        child: const Icon(Icons.add),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(12),
+      body: SafeArea(
         child: Column(
           children: [
-            // TYPE SELECT
-            Row(
-              children: [
-                ChoiceChip(
-                  label: const Text("شخصی"),
-                  selected: selectedType == "personal",
-                  onSelected: (_) {
-                    setState(() {
-                      selectedType = "personal";
-                      selectedCategory = null;
-                    });
-                  },
+            // HEADER DASHBOARD
+            Container(
+              padding: const EdgeInsets.all(16),
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.indigo, Colors.blue],
                 ),
-                const SizedBox(width: 10),
-                ChoiceChip(
-                  label: const Text("کاری"),
-                  selected: selectedType == "business",
-                  onSelected: (_) {
-                    setState(() {
-                      selectedType = "business";
-                      selectedCategory = null;
-                    });
-                  },
-                ),
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "دستیار هزینه‌ها",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "مجموع هزینه: $total تومان",
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 10),
 
-            // CATEGORY
-            DropdownButton<String>(
-              hint: const Text("انتخاب دسته"),
-              value: selectedCategory,
-              items: cats
-                  .map((e) =>
-                      DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (v) {
-                setState(() => selectedCategory = v);
-              },
-            ),
-
-            const SizedBox(height: 10),
-
-            TextField(
-              controller: titleCtrl,
-              decoration:
-                  const InputDecoration(labelText: "شرح هزینه"),
-            ),
-
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              decoration:
-                  const InputDecoration(labelText: "مبلغ"),
-            ),
-
-            const SizedBox(height: 10),
-
-            ElevatedButton(
-              onPressed: add,
-              child: const Text("ثبت"),
-            ),
-
-            const Divider(),
-
+            // LIST
             Expanded(
               child: ListView.builder(
-                itemCount: list.length,
+                itemCount: expenses.length,
                 itemBuilder: (c, i) {
-                  final e = list[i];
-                  return ListTile(
-                    title: Text("${e.title} - ${e.amount}"),
-                    subtitle: Text(
-                        "${e.type} | ${e.category} | ${e.date} (${e.weekday})"),
+                  final e = expenses[i];
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      title: Text(e.title),
+                      subtitle: Text("${e.category} | ${e.date}"),
+                      trailing: Text(
+                        "${e.amount} تومان",
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   );
                 },
               ),
