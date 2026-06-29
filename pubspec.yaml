@@ -1,5 +1,5 @@
 name: smart_assistant_pro
-description: Personal smart expense assistant with voice input and analytics
+description: Simple personal expense tracker
 publish_to: "none"
 
 version: 1.0.0+1
@@ -12,17 +12,11 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.6
-
-  # 💾 Storage
   shared_preferences: ^2.2.3
-
-  # 🎤 Voice input
-  speech_to_text: ^6.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^3.0.0
 
 flutter:

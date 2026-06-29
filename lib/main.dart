@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 void main() {
-  runApp(const SmartAssistant());
+  runApp(const ExpenseApp());
 }
 
 class Expense {
@@ -29,69 +28,70 @@ class Expense {
   }
 }
 
-class SmartAssistant extends StatefulWidget {
-  const SmartAssistant({super.key});
+class ExpenseApp extends StatelessWidget {
+  const ExpenseApp({super.key});
 
   @override
-  State<SmartAssistant> createState() => _SmartAssistantState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Smart Assistant',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.indigo,
+      ),
+      home: const HomePage(),
+    );
+  }
 }
 
-class _SmartAssistantState extends State<SmartAssistant> {
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
   final controller = TextEditingController();
-
   List<Expense> expenses = [];
-
-  late stt.SpeechToText speech;
-  bool isListening = false;
 
   @override
   void initState() {
     super.initState();
-    speech = stt.SpeechToText();
     loadData();
   }
 
-  // 🧠 دسته‌بندی هوشمند
-  String categorize(String text) {
+  String detectCategory(String text) {
     final t = text.toLowerCase();
 
-    if (t.contains("food") ||
-        t.contains("ناهار") ||
-        t.contains("غذا")) {
+    if (t.contains("food") || t.contains("غذا") || t.contains("ناهار")) {
       return "Food 🍽";
     }
 
-    if (t.contains("fuel") ||
-        t.contains("بنزین") ||
-        t.contains("diesel") ||
-        t.contains("gas")) {
+    if (t.contains("fuel") || t.contains("بنزین")) {
       return "Transport 🚚";
     }
 
-    if (t.contains("repair") ||
-        t.contains("تعمیر") ||
-        t.contains("machine")) {
+    if (t.contains("repair") || t.contains("تعمیر")) {
       return "Maintenance 🔧";
     }
 
     return "Other 📦";
   }
 
-  // 🎯 استخراج عدد از جمله (B MODE improved)
   double extractAmount(String text) {
     final regex = RegExp(r'(\d+(\.\d+)?)');
     final match = regex.firstMatch(text);
     return match != null ? double.parse(match.group(0)!) : 0;
   }
 
-  // 💾 ذخیره
   Future<void> saveData() async {
     final prefs = await SharedPreferences.getInstance();
     final data = jsonEncode(expenses.map((e) => e.toJson()).toList());
     await prefs.setString("expenses", data);
   }
 
-  // 📥 لود
   Future<void> loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString("expenses");
@@ -104,14 +104,13 @@ class _SmartAssistantState extends State<SmartAssistant> {
     }
   }
 
-  // ➕ افزودن (چه صوتی چه تایپی)
-  void addExpense(String input) {
-    final amount = extractAmount(input);
+  void addExpense(String text) {
+    final amount = extractAmount(text);
     if (amount == 0) return;
 
     setState(() {
       expenses.add(
-        Expense(input, amount, categorize(input)),
+        Expense(text, amount, detectCategory(text)),
       );
     });
 
@@ -119,41 +118,6 @@ class _SmartAssistantState extends State<SmartAssistant> {
     controller.clear();
   }
 
-  // 🎤 Voice (B mode improved stability)
-  Future<void> toggleVoice() async {
-    if (!isListening) {
-      bool available = await speech.initialize(
-        onError: (_) {},
-        onStatus: (_) {},
-      );
-
-      if (available) {
-        setState(() => isListening = true);
-
-        speech.listen(
-          localeId: "en_US",
-          listenMode: stt.ListenMode.confirmation,
-          onResult: (val) {
-            setState(() {
-              controller.text = val.recognizedWords;
-            });
-
-            // auto-stop if sentence seems complete
-            if (val.finalResult) {
-              addExpense(val.recognizedWords);
-              speech.stop();
-              setState(() => isListening = false);
-            }
-          },
-        );
-      }
-    } else {
-      speech.stop();
-      setState(() => isListening = false);
-    }
-  }
-
-  // 📊 analytics
   double get total =>
       expenses.fold(0, (sum, e) => sum + e.amount);
 
@@ -173,34 +137,25 @@ class _SmartAssistantState extends State<SmartAssistant> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Smart Assistant PRO Lite+"),
+        title: const Text("Smart Assistant PRO Lite"),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      labelText: "Type or Speak: e.g. ناهار 120",
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(isListening ? Icons.mic : Icons.mic_none),
-                  onPressed: toggleVoice,
-                )
-              ],
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: "مثال: ناهار 120",
+              ),
+              onSubmitted: addExpense,
             ),
 
             const SizedBox(height: 10),
 
             ElevatedButton(
               onPressed: () => addExpense(controller.text),
-              child: const Text("ثبت"),
+              child: const Text("ثبت هزینه"),
             ),
 
             const SizedBox(height: 20),
